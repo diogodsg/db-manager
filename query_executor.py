@@ -40,32 +40,30 @@ class QueryExecutor:
                 {col: entry[col] for col in spec["cols"]} for entry in self.data
             ]
 
+    def _get_file_map(self):
+        return {file.lower().split(".")[0]: file for file in os.listdir(self.directory)}
+
     def _handle_insert(self):
-        file_map = {
-            file.lower().split(".")[0]: file for file in os.listdir(self.directory)
-        }
+        file_map = self._get_file_map()
         spec = self.query_builder.insert_update_spec
-        self.data = self.load_table(file_map, spec["table"])
-        self.data.append(spec["row"])
-        self.save_table(file_map, spec["table"], self.data)
+        table_data = self.load_table(file_map, spec["table"])
+        table_data.append(spec["row"])
+        self.save_table(file_map, spec["table"], table_data)
 
     def _handle_update(self):
-        file_map = {
-            file.lower().split(".")[0]: file for file in os.listdir(self.directory)
-        }
+        file_map = self._get_file_map()
         spec = self.query_builder.insert_update_spec
-        self.data = self.load_table(file_map, spec["table"])
+        table_data = self.load_table(file_map, spec["table"])
         to_update = self._handle_where(
-            spec=self.query_builder.where_spec, data=self.data, reverse=False
+            spec=self.query_builder.where_spec, data=table_data, reverse=False
         )
 
-        for row in self.data:
+        for row in table_data:
             for update_row in to_update:
                 if update_row == row:
-                    for k, v in spec["row"].items():
-                        row[k] = v
+                    row.update(spec["row"])
 
-        self.save_table(file_map, spec["table"], self.data)
+        self.save_table(file_map, spec["table"], table_data)
 
     def _handle_delete(self):
         file_map = {
@@ -102,7 +100,6 @@ class QueryExecutor:
             data = self.data
 
         def handle_condition(row, condition):
-            print(row)
             left_side = row[condition["left_side"]]
             value = condition["value"]
             if isinstance(left_side, float) or isinstance(left_side, int):
@@ -167,6 +164,6 @@ class QueryExecutor:
 QueryExecutor(
     "./database",
     """
-    atualize dept_name=EngenhariaEletrica, tot_cred=100 de student onde dept_name=Elec. Eng.
+    selecione student.id, takes.year, student.name, takes.grade de student mescle takes em student.id=takes.id onde takes.year=2017 ou takes.year=2018 ordene por takes.year limite 5
 """,
 ).execute()
