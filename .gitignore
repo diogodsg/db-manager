@@ -1,4 +1,4 @@
 __pycache__/
 .venv/
-mysql_credentials.ini
+config.ini
 database/

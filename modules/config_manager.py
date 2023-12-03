@@ -13,7 +13,7 @@ class ConfigManager:
         print("Credentials saved to 'config.ini'.")
 
     @staticmethod
-    def load_mysql_config(credentials):
+    def load_mysql_config():
         config = configparser.ConfigParser()
         config.read("config.ini")
 
@@ -33,7 +33,7 @@ class ConfigManager:
 
         with open("config.ini", "w") as configfile:
             config.write(configfile)
-        print("Directory save")
+        print("Directory saved")
 
     @staticmethod
     def load_directory_config() -> str:

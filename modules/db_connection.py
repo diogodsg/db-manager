@@ -8,13 +8,14 @@ import os
 class DatabaseConnection:
     def __init__(self, directory):
         self.directory = directory
+        self.create_connection()
 
     def connect(self):
         print("Vamos conectar com seu MySql")
         host = input("Escreva o host: ")
-        port = input("Escreva o host: ")
+        port = input("Escreva a port: ")
         user = input("Escreva o usuario: ")
-        password = input("Escreva o usuario: ")
+        password = input("Escreva a senha: ")
 
         credentials = {
             "user": user,
@@ -54,13 +55,19 @@ class DatabaseConnection:
         try:
             conn = mysql.connector.connect(**config)
             if conn.is_connected():
+                print(
+                    f"{Fore.GREEN}Você está conectado à um Banco MySQL.({config['host']}: {config['port']}){Style.RESET_ALL}"
+                )
                 return conn
 
+            print(
+                f"{Fore.RED}Credenciais Inválidas ou inexistentes para o MySQL.{Style.RESET_ALL}"
+            )
             return False
 
         except mysql.connector.Error as e:
             print(
-                f"{Fore.RED}You are not connected to a MySQL Database.{Style.RESET_ALL}"
+                f"{Fore.RED}Credenciais Inválidas ou inexistentes para o MySQL.{Style.RESET_ALL}"
             )
             return False
 

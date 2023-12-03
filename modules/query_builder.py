@@ -143,7 +143,6 @@ class QueryBuilder:
                 column = f"{self.into_clause}.{match.group(1)}"
                 value = match.group(2)
                 row[column] = value
-
         self.insert_update_spec = {"row": row, "table": self.into_clause}
 
     def handle_delete_where(self):

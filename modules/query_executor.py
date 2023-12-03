@@ -150,7 +150,7 @@ class QueryExecutor:
     def _handle_limit(self):
         self.data = self.data[: self.query_builder.limit_spec]
 
-    def load_table(self, file_map: str, table: str):
+    def load_table(self, file_map: str, table: str): 
         df = pd.read_csv(os.path.join(self.directory, file_map[table]))
         df.columns = df.columns.str.lower().map(lambda x: f"{table}.{x}")
         return json.loads(df.to_json(orient="records"))
