@@ -1,23 +1,48 @@
-from tabulate import tabulate
-import os
-import pandas as pd
-import json
+from enum import Enum
 import re
-import operator
+
+
+class OrderDirection(Enum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 class QueryBuilder:
     def __init__(self, query: str):
         self.query = query.strip().lower()
-        self.start_clauses()
-        self.extract_clauses()
+        self.query = re.sub(r"\s+", " ", self.query).strip()
+        self.query_type = "QUERY"
+        if self.query.startswith("insira"):
+            self.query_type = "INSERT"
 
+        if self.query.startswith("delete"):
+            self.query_type = "DELETE"
+
+        if self.query.startswith("atualize"):
+            self.query_type = "UPDATE"
+
+        self.start_clauses()
         # generate easier to handle dicts
-        self.handle_select()
-        self.handle_from()
-        self.handle_where()
-        self.handle_order_by()
-        self.handle_limit()
+        if self.query_type == "QUERY":
+            self.extract_clauses_query()
+            self.handle_select()
+            self.handle_from()
+            self.handle_where()
+            self.handle_order_by()
+            self.handle_limit()
+
+        if self.query_type == "INSERT":
+            self.extract_clauses_insert()
+            self.handle_insert_update()
+
+        if self.query_type == "DELETE":
+            self.extract_clauses_delete()
+            self.handle_delete_where()
+
+        if self.query_type == "UPDATE":
+            self.extract_clauses_update()
+            self.handle_insert_update()
+            self.handle_where(table=self.into_clause)
 
     def start_clauses(self):
         self.select_clause = ""
@@ -27,9 +52,11 @@ class QueryBuilder:
         self.having_clause = ""
         self.order_by_clause = ""
         self.limit_clause = ""
+        self.insert_update_clause = ""
+        self.into_clause = ""
+        self.delete_clause = ""
 
-    def extract_clauses(self):
-        self.query = re.sub(r"\s+", " ", self.query).strip()
+    def extract_clauses_query(self):
         select_regex = re.compile(
             r"\bSELECIONE\b(.*?)\bDE\b", re.IGNORECASE | re.DOTALL
         )
@@ -43,9 +70,9 @@ class QueryBuilder:
         )
 
         order_by_regex = re.compile(
-            r"\bORDER BY\b(.*?)\b(?:LIMIT\b|$)", re.IGNORECASE | re.DOTALL
+            r"\bORDENE\s+POR\b(.*?)\b(?:LIMITE\b|$)", re.IGNORECASE | re.DOTALL
         )
-        limit_regex = re.compile(r"\bLIMIT\b(.*$)", re.IGNORECASE | re.DOTALL)
+        limit_regex = re.compile(r"\bLIMITE\b(.*$)", re.IGNORECASE | re.DOTALL)
 
         select_match = select_regex.search(self.query)
         from_match = from_regex.search(self.query)
@@ -65,61 +92,118 @@ class QueryBuilder:
         if limit_match:
             self.limit_clause = limit_match.group(1).strip()
 
+    def extract_clauses_insert(self):
+        insert_regex = re.compile(r"\bINSIRA\b(.*?)\bEM\b", re.IGNORECASE | re.DOTALL)
+        into_regex = re.compile(r"\bEM\b(.*$)", re.IGNORECASE | re.DOTALL)
+
+        insert_match = insert_regex.search(self.query)
+        into_match = into_regex.search(self.query)
+        if insert_match:
+            self.insert_update_clause = insert_match.group(1).strip()
+        if into_match:
+            self.into_clause = into_match.group(1).strip()
+
+    def extract_clauses_delete(self):
+        delete_regex = re.compile(
+            r"\bDELETE\s+DE\b(.*?)\bONDE\b", re.IGNORECASE | re.DOTALL
+        )
+        delete_where_regex = re.compile(r"\bONDE\b(.*$)", re.IGNORECASE | re.DOTALL)
+
+        delete_match = delete_regex.search(self.query)
+        delete_where_match = delete_where_regex.search(self.query)
+        if delete_match:
+            self.delete_clause = delete_match.group(1).strip()
+        if delete_where_match:
+            self.where_clause = delete_where_match.group(1).strip()
+
+    def extract_clauses_update(self):
+        update_regex = re.compile(r"\bATUALIZE\b(.*?)\bDE\b", re.IGNORECASE | re.DOTALL)
+        update_table_regex = re.compile(
+            r"\bDE\b\s+(\w+)\s+ONDE\b", re.IGNORECASE | re.DOTALL
+        )
+        update_where_regex = re.compile(r"\bONDE\b(.*$)", re.IGNORECASE | re.DOTALL)
+
+        update_match = update_regex.search(self.query)
+        update_table_match = update_table_regex.search(self.query)
+        update_where_match = update_where_regex.search(self.query)
+
+        if update_match:
+            self.insert_update_clause = update_match.group(1).strip()
+        if update_table_match:
+            self.into_clause = update_table_match.group(1).strip()
+        if update_where_match:
+            self.where_clause = update_where_match.group(1).strip()
+
+    def handle_insert_update(self):
+        columns = [col.strip() for col in self.insert_update_clause.split(",")]
+        row = {}
+        for col in columns:
+            match = re.match(r"(\w+)=(\w+)", col)
+            if match:
+                column = f"{self.into_clause}.{match.group(1)}"
+                value = match.group(2)
+                row[column] = value
+
+        self.insert_update_spec = {"row": row, "table": self.into_clause}
+
+    def handle_delete_where(self):
+        self.handle_where(self.delete_clause)
+        self.delete_spec = {"query": self.where_spec, "table": self.delete_clause}
+
     def handle_select(self):
         if self.select_clause == "*":
             self.select_spec = {"all": True, "cols": []}
-            return
-
-        self.select_spec = {
-            "all": False,
-            "cols": [col.strip() for col in self.select_clause.split(",")],
-        }
+        else:
+            self.select_spec = {
+                "all": False,
+                "cols": [col.strip() for col in self.select_clause.split(",")],
+            }
 
     def handle_from(self):
         pattern = r"MESCLE\s+(\w+)\s+EM\s+(\w+)\.(\w+)=(\w+)\.(\w+)"
-
         matches = re.findall(pattern, self.from_clause, re.IGNORECASE)
 
-        output = {
-            "from": self.from_clause.split(" ")[0],
-            "joins": [],
-        }
+        output = {"from": self.from_clause.split(" ")[0], "joins": []}
 
         for match in matches:
-            if match[0] == match[1]:
-                join_info = {
-                    "join_col": f"{match[1]}.{match[2]}",
-                    "base_col": f"{match[3]}.{match[4]}",
-                }
-                join_info["table"] = match[1]
-            else:
-                join_info = {
-                    "join_col": f"{match[3]}.{match[4]}",
-                    "base_col": f"{match[1]}.{match[2]}",
-                }
-                join_info["table"] = match[3]
-
+            join_info = self._get_join_info(match)
             output["joins"].append(join_info)
 
         self.from_spec = output
 
-    def handle_where(self):
+    def _get_join_info(self, match):
+        if match[0] == match[1]:
+            join_col, base_col, table = (
+                f"{match[1]}.{match[2]}",
+                f"{match[3]}.{match[4]}",
+                match[1],
+            )
+        else:
+            join_col, base_col, table = (
+                f"{match[3]}.{match[4]}",
+                f"{match[1]}.{match[2]}",
+                match[3],
+            )
+
+        return {"join_col": join_col, "base_col": base_col, "table": table}
+
+    def handle_where(self, table: str = ""):
         sql_where = self.where_clause.replace("ONDE ", "").split(" e ")
         clauses = {"$and": []}
         for and_clause in sql_where:
-            and_condition = {}
-            or_clause = and_clause.split(" ou ")
-            and_condition["$or"] = []
-            for clause in or_clause:
+            and_condition = {"$or": []}
+            for clause in and_clause.split(" ou "):
                 clause = clause.strip()
-                pattern = r"([.\w]+)\s*(=|>|>=|<|<=)\s*([\w\s.]+)"
-                match = re.match(pattern, clause)
+                match = re.match(r"([.\w]+)\s*(=|>|>=|<|<=)\s*([\w\s.]+)", clause)
                 if match:
-                    left_side = match.group(1)
-                    operator = match.group(2)
-                    value = match.group(3).strip("'")
+                    left_side, operator, value = match.groups()
+                    left_side = f"{table}.{left_side}" if table else left_side
                     and_condition["$or"].append(
-                        {"operator": operator, "left_side": left_side, "value": value}
+                        {
+                            "operator": operator,
+                            "left_side": left_side,
+                            "value": value.strip("'"),
+                        }
                     )
             clauses["$and"].append(and_condition)
         self.where_spec = clauses
@@ -128,120 +212,21 @@ class QueryBuilder:
         if not self.order_by_clause:
             self.order_spec = []
             return
-        orders = self.order_by_clause.split(",")
-        order_arr = []
-        for order in orders:
-            order = order.strip().split(" ")
-            order_spec = {"column": order[0]}
-            order_spec["direction"] = "asc"
 
-            if len(order) > 1 and order[1] == "desc":
-                order_spec["direction"] = "desc"
-
-            order_arr.append(order_spec)
-
+        order_arr = [
+            {
+                "column": order[0],
+                "direction": OrderDirection(
+                    order[1]
+                    if len(order) > 1 and order[1] == "desc"
+                    else OrderDirection.ASC
+                ),
+            }
+            for order in (
+                order.strip().split(" ") for order in self.order_by_clause.split(",")
+            )
+        ]
         self.order_spec = order_arr
 
     def handle_limit(self):
         self.limit_spec = int(self.limit_clause) if self.limit_clause else None
-
-
-class QueryExecutor:
-    def __init__(self, directory: str, query):
-        self.query_builder = QueryBuilder(query)
-        self.directory = directory
-        self.data = []
-
-    def execute(self):
-        self._handle_from()
-        self._handle_where()
-        self._handle_select()
-        self._handle_order_by()
-        self._handle_limit()
-        self.print_table()
-
-    def print_table(self, data=None):
-        if not data:
-            data = self.data
-        table = tabulate(data, headers="keys", tablefmt="psql")
-        print(table)
-
-    def _handle_select(self):
-        spec = self.query_builder.select_spec
-        if not spec["all"]:
-            self.data = [
-                {col: entry[col] for col in spec["cols"]} for entry in self.data
-            ]
-
-    def _handle_from(self):
-        file_map = {
-            file.lower().split(".")[0]: file for file in os.listdir(self.directory)
-        }
-        spec = self.query_builder.from_spec
-        self.data = self.load_table(file_map, spec["from"])
-
-        for join in spec["joins"]:
-            join_table = self.load_table(file_map, join["table"])
-            lookup_table = {item[join["join_col"]]: item for item in join_table}
-            self.data = [
-                {**item1, **lookup_table[item1[join["base_col"]]]}
-                for item1 in self.data
-                if item1[join["base_col"]] in lookup_table
-            ]
-
-    def _handle_where(self):
-        spec = self.query_builder.where_spec
-
-        def handle_condition(row, condition):
-            left_side = row[condition["left_side"]]
-            value = condition["value"]
-            if isinstance(left_side, float) or isinstance(left_side, int):
-                left_side = int(left_side)
-                value = int(value)
-            if isinstance(left_side, str):
-                left_side = left_side.lower()
-
-            comparison_operator = condition["operator"]
-
-            operators = {
-                "=": operator.eq,
-                ">": operator.gt,
-                ">=": operator.ge,
-                "<": operator.lt,
-                "<=": operator.le,
-            }
-
-            if comparison_operator in operators:
-                return operators[comparison_operator](left_side, value)
-
-            return True
-
-        def met_conditions(row):
-            for and_condition in spec["$and"]:
-                condition_met = False if len(and_condition["$or"]) else True
-                for or_condition in and_condition["$or"]:
-                    if handle_condition(row, or_condition):
-                        condition_met = True
-
-                if not condition_met:
-                    return False
-            return True
-
-        self.data = [row for row in self.data if met_conditions(row)]
-
-    def _handle_order_by(self):
-        spec = self.query_builder.order_spec
-        for item in spec[::-1]:
-            self.data = sorted(
-                self.data,
-                key=lambda x: x[item["column"]],
-                reverse=item["direction"] == "asc",
-            )
-
-    def _handle_limit(self):
-        self.data = self.data[: self.query_builder.limit_spec]
-
-    def load_table(self, file_map: str, table: str):
-        df = pd.read_csv(os.path.join(self.directory, file_map[table]))
-        df.columns = df.columns.str.lower().map(lambda x: f"{table}.{x}")
-        return json.loads(df.to_json(orient="records"))
