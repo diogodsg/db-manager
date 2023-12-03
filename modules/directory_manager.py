@@ -6,9 +6,9 @@ from modules.config_manager import ConfigManager
 class DirectoryManager:
     def __init__(self) -> None:
         self.directory = ConfigManager.load_directory_config()
-        self.ensure_directory_exists()
         if not self.directory:
             self.directory = "./database"
+        self.ensure_directory_exists()
 
     def ensure_directory_exists(self):
         if not os.path.exists(self.directory):
