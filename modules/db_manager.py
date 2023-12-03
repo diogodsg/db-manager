@@ -10,8 +10,8 @@ class DatabaseManager:
         QueryExecutor(directory, query).execute()
 
     def list_tables(self, directory: str):
-        print("\nList of Tables:")
-        print("{:<5} {:<20}".format("No.", "Table Name"))
+        print("\Lista de Tabelas:")
+        print("{:<5} {:<20}".format("No.", "Tabela"))
         print("-" * 30)
 
         count = 1

@@ -30,22 +30,36 @@ class DatabaseConnection:
     def _select_database(self, cursor):
         cursor.execute("SHOW DATABASES;")
         databases = cursor.fetchall()
-        for i in range(len(databases)):
-            print(f"{i+1}: {databases[i][0]}")
 
-        selected_db = int(input("Selecione um banco de dados"))
+        print("\Lista de Banco de Dados:")
+        print("{:<5} {:<20}".format("No.", "Banco de Dados"))
+        print("-" * 30)
+        for i in range(len(databases)):
+            print("{:<5} {:<20}".format(i + 1, databases[i][0]))
+
+        selected_db = int(
+            input(f"{Fore.YELLOW}Selecione um banco de dados: {Style.RESET_ALL}")
+        )
         cursor.execute(f"use {databases[selected_db-1][0]};")
 
     def _select_table(self, cursor):
         cursor.execute("SHOW TABLES;")
         tables = cursor.fetchall()
+
+        print("\nLista de Tabelas:")
+        print("{:<5} {:<20}".format("No.", "Tabela"))
+        print("-" * 30)
+
         for i in range(len(tables)):
-            print(f"{i+1}: {tables[i][0]}")
-        selected_db = int(input("Selecione um banco de dados"))
-        return tables[selected_db - 1][0]
+            print("{:<5} {:<20}".format(i, tables[i][0]))
+        selected_db = int(
+            input(f"{Fore.YELLOW}Selecione uma tabela: {Style.RESET_ALL}")
+        )
+        return tables[selected_db][0]
 
     def _write_csv(self, table: str, conn):
-        query = f"SELECT * FROM {table} LIMIT 50;"
+        query = f"SELECT * FROM {table};"
+        print(query)
         df = pd.read_sql_query(query, conn)
         csv_filename = os.path.join(self.directory, f"{table}.csv")
         df.to_csv(csv_filename, index=False)
