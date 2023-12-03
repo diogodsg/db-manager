@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import json
 import operator
-from query_builder import QueryBuilder
+from modules.query_builder import QueryBuilder
 
 
 class QueryExecutor:
@@ -161,9 +161,9 @@ class QueryExecutor:
         df.to_csv(os.path.join(self.directory, file_map[table]), index=False)
 
 
-QueryExecutor(
-    "./database",
-    """
-    selecione student.id, takes.year, student.name, takes.grade de student mescle takes em student.id=takes.id onde takes.year=2017 ou takes.year=2018 ordene por takes.year limite 5
-""",
-).execute()
+# QueryExecutor(
+#     "./database",
+#     """
+#     selecione student.id, takes.year, student.name, takes.grade de student mescle takes em student.id=takes.id onde takes.year=2017 ou takes.year=2018 ordene por takes.year limite 5
+# """,
+# ).execute()

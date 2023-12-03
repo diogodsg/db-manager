@@ -1,5 +1,5 @@
 import sqlite3
-from query_executor import QueryExecutor
+from modules.query_executor import QueryExecutor
 
 
 class DatabaseManager:
